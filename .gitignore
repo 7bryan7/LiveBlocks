@@ -7,3 +7,6 @@ dashboard/dist/
 dashboard/.wrangler/
 dashboard/.sites-runtime/
 *.tsbuildinfo
+.next/
+.vercel/
+.openai/

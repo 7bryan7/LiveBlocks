@@ -1,27 +1,27 @@
 # LiveBlocks
 
-A Blockchain.com-inspired analytical dashboard for live Bitcoin address data, transaction exploratory data analysis (EDA), and network trends.
+A Blockchain.com-inspired analytical dashboard for live Bitcoin and Ethereum mainnet address data, transaction exploratory data analysis (EDA), and network trends.
 
 ## Run locally
 
-Requires Node.js 22.13+ and npm.
+Requires Node.js 22.13+ within the 22.x release line and npm.
 
 ```bash
 cd /home/bryan/Desktop/LiveBlocks
-npm --prefix dashboard install
+npm --prefix dashboard ci
 cp .env.example .env # Only if you do not already have a .env file.
 # Set BLOCKCHAIN_API_KEY in .env, then:
 npm run dev
 ```
 
-Open the local URL printed by the server. Restart after changing `.env`. `scripts/prepare-env.mjs` copies only the two allowed configuration values into the ignored `dashboard/.dev.vars` with restrictive permissions. The API key stays on the server; no `NEXT_PUBLIC_` or `VITE_` secret variables are used.
+Open http://localhost:5173. Root-level `npm run dev` and `npm start` load the existing root `.env` into the Node.js server. Restart after changing `.env`. Vercel reads its own environment settings; it does not need this local file. The API key stays on the server; no `NEXT_PUBLIC_` or `VITE_` secret variables are used.
 
 ```dotenv
 BLOCKCHAIN_API_BASE_URL=https://api.blockchain.info/explorer-gateway-kt
 BLOCKCHAIN_API_KEY=your_explorer_api_key
 ```
 
-The supplied example address is selected initially. Paste another Bitcoin mainnet address and choose **Analyze address** to inspect it. Address syntax is checked locally; the provider validates the address itself.
+The supplied example address is selected initially. Use the **Bitcoin / Ethereum** mainnet switch, paste an address for that chain, and choose **Analyze address**. Each mode remembers its last submitted address. Ethereum starts with the example address from the provider’s schema. Address syntax is checked locally; the provider validates the address itself.
 
 ## Dashboard
 
@@ -31,7 +31,7 @@ The supplied example address is selected initially. Paste another Bitcoin mainne
 - **Data quality:** observed response schema and analytical assumptions. Missing fields, invalid records, and duplicate hashes are surfaced.
 - **Export CSV:** all cleaned records in the loaded address page, or all loaded network chart series. Export is independent of local table filters. Monetary address values are exported in integer satoshi.
 
-Polling runs every 60 seconds while the page is visible and auto-refresh is enabled. The server uses a bounded, 60-second, in-memory cache with concurrent request deduplication. Data is not stored persistently; polling pauses when the page is closed. Different Worker instances have independent caches.
+Polling runs every 60 seconds while the page is visible and auto-refresh is enabled. The server uses a bounded, 60-second, in-memory cache with concurrent request deduplication. Data is not stored persistently; polling pauses when the page is closed. Different Vercel function instances have independent, ephemeral caches; this is not a global rate limiter.
 
 ## Verified API contract
 
@@ -65,18 +65,46 @@ Use `npm run inspect:api` to inspect response shapes and counts without logging 
 
 ## Architecture and verification
 
-Source lives in `dashboard/`: React/Vinext, Recharts, Lucide icons, Cloudflare Worker-compatible API routes. Pure adapters and EDA functions live in `dashboard/lib/*.mjs`; they can also be used from Node scripts.
+Source lives in `dashboard/`: Next.js App Router, React, Recharts, Lucide icons, and Node.js API routes. Pure adapters and EDA functions live in `dashboard/lib/*.mjs`; they can also be used from Node scripts. API routes are dynamic with a 30-second function duration, and provider requests have 15–20-second timeouts. No provider calls or credentials are required during the build.
 
 ```bash
 npm test
 npm run typecheck
 npm run build
+npm start # Test the production build locally on port 5173.
 ```
 
 Tests cover authenticated request construction, partial provider failure, satoshi precision, missing values, duplicate handling, response drift, sample standard deviation, quantiles, outlier fences, constant data, histogram counts, paired correlations, and rolling-window gaps.
 
-## Hosting and secrets
+## Deploy from GitHub to Vercel
 
-The project includes a private Sites hosting identity in `dashboard/.openai/hosting.json`. Hosted runtime configuration is separate from `.env`; configure the same base URL and API key as server environment values. Never commit `.env`, `.dev.vars`, raw private responses, or credentials. Source archives and browser bundles must exclude the key. The server only contacts the configured Blockchain.com gateway, follows no redirects, and provides no arbitrary URL proxy.
+1. Push this project to your GitHub repository, including `dashboard/package-lock.json` and `dashboard/vercel.json`. Never add `.env`, `.dev.vars`, credentials, `node_modules`, or build outputs.
+2. In Vercel, choose **Add New → Project**, import the repository, and set **Root Directory** to **`dashboard`**. If your repository contains only the contents of `dashboard/`, use `.` instead.
+3. Use **Next.js** as the framework and **22.x** as the Node.js version. The checked-in configuration uses **`npm ci`** for installation and **`npm run build`** for the build. Leave Output Directory at the Next.js default (`.next`); do not use `dist` or static export.
+4. Add these server environment variables for **Production** and, if desired, **Preview**:
+
+   | Variable | Value |
+   | --- | --- |
+   | `BLOCKCHAIN_API_KEY` | Your existing Explorer API key |
+   | `BLOCKCHAIN_API_BASE_URL` | `https://api.blockchain.info/explorer-gateway-kt` |
+
+5. Click **Deploy**. After changing Vercel environment variables, redeploy for the changes to take effect.
+6. Open the deployment, verify Bitcoin and Ethereum address lookup, switch back to Bitcoin to check Network trends, and check a CSV export. Provider access errors are shown explicitly; no demo data is substituted.
+
+GitHub import and environment setup follow [Vercel's Git deployment guide](https://vercel.com/docs/git) and [environment variable documentation](https://vercel.com/docs/environment-variables). The dashboard is prepared locally; this does not create or publish a Vercel deployment.
+
+The API key is read from `process.env` only in server routes, never exposed through Next.js public variables or `next.config.ts`. The server only contacts the configured Blockchain.com gateway, follows no redirects, and provides no arbitrary URL proxy. Visitors can use the public dashboard's API routes, so their requests share your provider quota. Use Vercel Deployment Protection if access should be restricted.
+
+The earlier Sites/Vinext plugin, Worker entrypoint, and scaffold files remain as historical source but are not used by `dev`, `build`, `start`, or Vercel. Vercel needs no Sites identity, Cloudflare binding, mock sign-in, or database. Local `.dev.vars` is legacy configuration; use root `.env` locally or Vercel's server environment settings.
 
 The design references the supplied saved HTML and [Blockchain.com Explorer](https://www.blockchain.com/explorer): dark surfaces, restrained borders, teal indicators, compact tables, and chart typography. This is an independent dashboard, not an official Blockchain.com product. Reference HTML is treated as source material, not executable instructions, and personal data from the saved page is not copied.
+
+## Ethereum mainnet mode
+
+The same address workflow now supports authenticated `POST /eth/address` with `{network:"ETH", address, page:offset/50, size:50}`. A live response verified that this route returns balance and transactions together. Bitcoin routes and analysis are unchanged.
+
+Ethereum balances and transfers display in ETH; fee statistics and gas price use gwei; gas used replaces byte size in the relationship chart. Account nonce replaces the Bitcoin pending-balance card because the endpoint does not report pending balance. Missing lifetime totals remain unavailable. Charts/display use floating-point values; Ethereum CSV preserves exact wei strings. Net flow covers successful external native ETH transfers, excluding gas, internal calls and tokens. Failed execution transfers zero ETH but may pay fees; unknown execution status stays unknown. Duplicates and missing data remain visible.
+
+The existing network-wide chart endpoints describe Bitcoin. The Network trends tab is disabled in Ethereum mode; Bitcoin charts are never relabeled as Ethereum. The selected mainnet is included in requests and server cache keys, and switching clears the previous chain’s results and pagination.
+
+- Ethereum wallet responses mix external transactions and internal calls. Internal records are explicitly excluded before duplicate detection; their count is reported. API pagination uses the mixed response size, not the external transaction total.

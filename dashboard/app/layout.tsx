@@ -3,10 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LiveBlocks — Blockchain Analytics",
-  description: "Explore Bitcoin address activity, fees, network trends, and data quality with Blockchain.com data.",
-  other: {
-    "codex-preview": "development",
-  },
+  description: "Explore Bitcoin and Ethereum mainnet address activity, fees, network trends, and data quality with Blockchain.com data.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",

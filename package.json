@@ -2,9 +2,11 @@
   "name": "liveblocks",
   "private": true,
   "type": "module",
+  "engines": { "node": "22.x" },
   "scripts": {
-    "dev": "node scripts/prepare-env.mjs && npm --prefix dashboard run dev",
+    "dev": "node --env-file-if-exists=.env dashboard/node_modules/next/dist/bin/next dev dashboard --port 5173",
     "build": "npm --prefix dashboard run build",
+    "start": "node --env-file-if-exists=.env dashboard/node_modules/next/dist/bin/next start dashboard --port 5173",
     "test": "node --test dashboard/tests/*.test.mjs",
     "typecheck": "cd dashboard && npx tsc --noEmit",
     "inspect:api": "node scripts/inspect-api.mjs"

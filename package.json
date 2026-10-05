@@ -1,0 +1,12 @@
+{
+  "name": "liveblocks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/prepare-env.mjs && npm --prefix dashboard run dev",
+    "build": "npm --prefix dashboard run build",
+    "test": "node --test dashboard/tests/*.test.mjs",
+    "typecheck": "cd dashboard && npx tsc --noEmit",
+    "inspect:api": "node scripts/inspect-api.mjs"
+  }
+}

@@ -4,17 +4,18 @@ A Blockchain.com-inspired analytical dashboard for live Bitcoin and Ethereum mai
 
 ## Run locally
 
-Requires Node.js 22.13+ within the 22.x release line and npm.
+Requires Node.js 22.13+ within the 22.x release line, npm, and Python 3.12 with venv/pip.
 
 ```bash
 cd /home/bryan/Desktop/LiveBlocks
 npm --prefix dashboard ci
+npm run setup:python
 cp .env.example .env # Only if you do not already have a .env file.
 # Set BLOCKCHAIN_API_KEY in .env, then:
 npm run dev
 ```
 
-Open http://localhost:5173. Root-level `npm run dev` and `npm start` load the existing root `.env` into the Node.js server. Restart after changing `.env`. Vercel reads its own environment settings; it does not need this local file. The API key stays on the server; no `NEXT_PUBLIC_` or `VITE_` secret variables are used.
+Open http://localhost:5173. `npm run dev` and `npm start` start Next.js on port 5173 and the Flask backend on loopback port 5328. The launcher loads the existing root `.env` (or dashboard `.env.local`); the Python backend reads credentials using `os.environ`. Ctrl+C stops both processes. Restart after changing `.env`. Vercel reads its own environment settings; it does not need this local file. The API key stays on the server; no `NEXT_PUBLIC_` or `VITE_` secret variables are used.
 
 ```dotenv
 BLOCKCHAIN_API_BASE_URL=https://api.blockchain.info/explorer-gateway-kt
@@ -29,9 +30,9 @@ The supplied example address is selected initially. Use the **Bitcoin / Ethereum
 - **Transactions:** server pagination (50 records/page), local row pagination, hash/date search, direction and unconfirmed filters, fee-outlier filter, UTC timestamps, and transaction explorer links.
 - **Network trends:** 7/30/90/365-day chart requests, price/transactions/hash rate/fees, descriptive statistics, seven-day moving averages, and a correlation matrix.
 - **Data quality:** observed response schema and analytical assumptions. Missing fields, invalid records, and duplicate hashes are surfaced.
-- **Export CSV:** all cleaned records in the loaded address page, or all loaded network chart series. Export is independent of local table filters. Monetary address values are exported in integer satoshi.
+- **Export CSV:** all cleaned records in the loaded address page, or all loaded network chart series. Export is independent of local table filters. Bitcoin monetary values are exported in integer satoshi; Ethereum exports preserve exact integer wei.
 
-Polling runs every 60 seconds while the page is visible and auto-refresh is enabled. The server uses a bounded, 60-second, in-memory cache with concurrent request deduplication. Data is not stored persistently; polling pauses when the page is closed. Different Vercel function instances have independent, ephemeral caches; this is not a global rate limiter.
+Polling runs every 60 seconds while the page is visible and auto-refresh is enabled. The server uses a bounded, 60-second, in-memory cache with concurrent request deduplication. Data is not stored persistently; polling pauses when the page is closed. Different Vercel Python function instances have independent, ephemeral caches; this is not a global rate limiter. Up to 12 distinct requests may be in flight per instance; duplicate concurrent requests share the result.
 
 ## Verified API contract
 
@@ -65,7 +66,21 @@ Use `npm run inspect:api` to inspect response shapes and counts without logging 
 
 ## Architecture and verification
 
-Source lives in `dashboard/`: Next.js App Router, React, Recharts, Lucide icons, and Node.js API routes. Pure adapters and EDA functions live in `dashboard/lib/*.mjs`; they can also be used from Node scripts. API routes are dynamic with a 30-second function duration, and provider requests have 15–20-second timeouts. No provider calls or credentials are required during the build.
+Source lives in `dashboard/`. Next.js/React renders the dashboard; Flask serves the Python APIs. NumPy and Pandas now perform all data preparation and EDA. The previous JavaScript adapters and statistical functions have been removed. Browser code retains presentation formatting, form validation, table filtering/sorting, and chart rendering only.
+
+| Module | Responsibility |
+| --- | --- |
+| `python_backend/adapters.py` | Schema validation, missing/invalid/duplicate handling, BTC/ETH normalization and exact wei preservation |
+| `python_backend/analytics.py` | NumPy statistics, histograms and correlations; Pandas daily grouping and rolling averages; outlier flags and completeness |
+| `python_backend/gateway.py` | Authenticated provider access, fixed HTTPS gateway, size limits, no redirects, partial errors |
+| `python_backend/exports.py` | CSV preparation and Matplotlib PNG fee reports |
+| `python_backend/server.py` | Flask routes, input validation, bounded caches and concurrent request deduplication |
+| `api/address.py`, `api/analytics.py`, `api/report.py` | Vercel Python WSGI entrypoints |
+| `app/page.tsx` | React/Recharts presentation of Python-computed results |
+
+The existing `/api/address` and `/api/analytics` URLs and core response fields are preserved. Address results add `transactions.analysis` (daily flow, totals, histogram bins, paired correlation), per-row `outlier`, quality completeness, and a prepared `csv` string. Network results add per-series rolling chart points, a correlation matrix, and CSV. Exports use the loaded snapshot rather than refetching or recalculating in the browser. Empty/unavailable datasets remain explicit.
+
+Python functions allow 60 seconds; upstream requests have 15–20-second timeouts. No provider calls or credentials are required during the Next.js build. Python dependencies are pinned, including transitives, in `dashboard/requirements.txt`; `.python-version` selects 3.12. `npm run setup:python` creates an isolated `.venv`. Set `PYTHON_BIN` to use an already configured Python environment instead.
 
 ```bash
 npm test
@@ -74,13 +89,13 @@ npm run build
 npm start # Test the production build locally on port 5173.
 ```
 
-Tests cover authenticated request construction, partial provider failure, satoshi precision, missing values, duplicate handling, response drift, sample standard deviation, quantiles, outlier fences, constant data, histogram counts, paired correlations, and rolling-window gaps.
+The Python unittest suite covers authenticated requests, partial provider failure, exact wei and satoshi precision, missing values, duplicates, schema drift, sample standard deviation, quantiles, outlier fences, histogram edges, paired correlations, daily UTC aggregation, rolling-window gaps, CSV, Matplotlib output, route validation and concurrent cache deduplication. `npm test` invokes this suite; there is no JavaScript analysis fallback. Synthetic fixtures exist only in tests and are excluded from deployment bundles.
 
 ## Deploy from GitHub to Vercel
 
-1. Push this project to your GitHub repository, including `dashboard/package-lock.json` and `dashboard/vercel.json`. Never add `.env`, `.dev.vars`, credentials, `node_modules`, or build outputs.
+1. Push this project to your GitHub repository, including `dashboard/package-lock.json`, `dashboard/requirements.txt`, `dashboard/.python-version`, `dashboard/api/`, `dashboard/python_backend/`, and `dashboard/vercel.json`. Never add `.env`, `.dev.vars`, credentials, `node_modules`, or build outputs.
 2. In Vercel, choose **Add New → Project**, import the repository, and set **Root Directory** to **`dashboard`**. If your repository contains only the contents of `dashboard/`, use `.` instead.
-3. Use **Next.js** as the framework and **22.x** as the Node.js version. The checked-in configuration uses **`npm ci`** for installation and **`npm run build`** for the build. Leave Output Directory at the Next.js default (`.next`); do not use `dist` or static export.
+3. Use **Next.js** as the framework and **22.x** as the Node.js version. The checked-in configuration uses **`npm ci`** for installation and **`npm run build`** for the build. Leave Output Directory at the Next.js default (`.next`); do not use `dist` or static export. Vercel detects the Python functions under `api/`, installs `requirements.txt`, and runs them separately from Node.js. Do not run the local two-process launcher as a Vercel build command.
 4. Add these server environment variables for **Production** and, if desired, **Preview**:
 
    | Variable | Value |
@@ -93,7 +108,13 @@ Tests cover authenticated request construction, partial provider failure, satosh
 
 GitHub import and environment setup follow [Vercel's Git deployment guide](https://vercel.com/docs/git) and [environment variable documentation](https://vercel.com/docs/environment-variables). The dashboard is prepared locally; this does not create or publish a Vercel deployment.
 
-The API key is read from `process.env` only in server routes, never exposed through Next.js public variables or `next.config.ts`. The server only contacts the configured Blockchain.com gateway, follows no redirects, and provides no arbitrary URL proxy. Visitors can use the public dashboard's API routes, so their requests share your provider quota. Use Vercel Deployment Protection if access should be restricted.
+The API key is read from `os.environ` only by the Python server, never exposed through Next.js public variables or `next.config.ts`. The server only contacts the configured Blockchain.com gateway, follows no redirects, and provides no arbitrary URL proxy. Visitors can use the public dashboard's API routes, so their requests share your provider quota. Use Vercel Deployment Protection if access should be restricted.
+
+The integration follows [Vercel's Python runtime](https://vercel.com/docs/functions/runtimes/python) and [Next.js + Python guidance](https://vercel.com/kb/guide/how-to-use-python-and-javascript-in-the-same-application). Local Next.js rewrites API calls to Flask; on Vercel, the same paths resolve to the Python functions. Python bundle exclusions omit Node dependencies, frontend build artifacts, virtual environments, tests and local secret files. A Next.js build alone does not validate Vercel's Python packaging; verify both API modes after the first hosted deployment.
+
+## Matplotlib report
+
+`GET /api/report?chain=btc&address=<bitcoin-address>&offset=0` downloads a PNG fee histogram for the selected API page. Use `chain=eth` with an Ethereum address for gwei fees. The report uses the same Python normalization and cached snapshot as the dashboard, labels the sample and retrieval time, and returns an explicit error when no fee observations are available. It does not replace interactive Recharts charts. No files are persisted by the report endpoint.
 
 The earlier Sites/Vinext plugin, Worker entrypoint, and scaffold files remain as historical source but are not used by `dev`, `build`, `start`, or Vercel. Vercel needs no Sites identity, Cloudflare binding, mock sign-in, or database. Local `.dev.vars` is legacy configuration; use root `.env` locally or Vercel's server environment settings.
 

@@ -2,5 +2,11 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "installCommand": "npm ci",
-  "buildCommand": "npm run build"
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/*.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{node_modules/**,.next/**,.venv/**,tests/**,tests_python/**,app/**,components/**,build/**,examples/**,vendor/**,public/**,.openai/**,.env*,.dev.vars*,dist/**,.wrangler/**}"
+    }
+  }
 }

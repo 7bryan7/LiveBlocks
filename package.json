@@ -2,13 +2,16 @@
   "name": "liveblocks",
   "private": true,
   "type": "module",
-  "engines": { "node": "22.x" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env dashboard/node_modules/next/dist/bin/next dev dashboard --port 5173",
+    "dev": "node dashboard/scripts/run-local.mjs dev",
     "build": "npm --prefix dashboard run build",
-    "start": "node --env-file-if-exists=.env dashboard/node_modules/next/dist/bin/next start dashboard --port 5173",
-    "test": "node --test dashboard/tests/*.test.mjs",
-    "typecheck": "cd dashboard && npx tsc --noEmit",
-    "inspect:api": "node scripts/inspect-api.mjs"
+    "start": "node dashboard/scripts/run-local.mjs start",
+    "test": "npm --prefix dashboard test",
+    "typecheck": "npm --prefix dashboard run typecheck",
+    "inspect:api": "node --env-file-if-exists=.env dashboard/scripts/python.mjs inspect",
+    "setup:python": "npm --prefix dashboard run setup:python"
   }
 }

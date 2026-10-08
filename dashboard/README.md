@@ -1,14 +1,15 @@
 # LiveBlocks dashboard
 
-Bitcoin and Ethereum mainnet address analytics built with Next.js, React, Recharts and Node.js API routes, ready for Vercel.
+Next.js/React/Recharts frontend with a Flask Python backend. NumPy and Pandas own data preparation and EDA; Matplotlib generates downloadable fee-report PNGs. Bitcoin/Ethereum address workflows and the dark interface are preserved.
 
-From the parent LiveBlocks workspace use `npm run dev`, `npm test`, `npm run typecheck` and `npm run build`. Full setup, API contracts, methods, limitations, and change history are in the parent `README.md` and `HISTORY.md`.
+## Local setup
 
-For this application checkout on its own:
+Requires Node.js 22.x, npm and Python 3.12 with venv/pip.
 
 ```bash
 npm ci
-# Copy .env.example to .env.local and configure the API key and base URL.
+npm run setup:python
+# Copy .env.example to .env.local and configure the key and base URL.
 npm run dev
 npm test
 npm run typecheck
@@ -16,20 +17,19 @@ npm run build
 npm start
 ```
 
-The API key is sent only to address endpoints on the server. Network-context chart endpoints use public access because the configured address key was rejected by chart endpoints. Neither source nor exports contain credentials.
+The launcher starts Next.js on port 5173 and Flask on loopback port 5328 and stops both on Ctrl+C. The parent workspace `.env` is also supported. `PYTHON_BIN` can select a custom Python environment. Build first before `npm start`. Vercel executes Python directly; the local Flask development server is never deployed as a long-running service.
 
-Address EDA covers the selected page of 50 transactions, with lifetime summary cards separate. Charts, histograms, sample statistics, IQR outlier flags, and Pearson correlations use real provider observations. CSV exports use satoshi for address money fields. Do not infer full-history or wallet-level conclusions from the sample.
+## Vercel import
 
-## Vercel GitHub import
+- Root Directory: `dashboard` in the full repository, or `.` for this directory on its own.
+- Framework: Next.js; Node.js: 22.x; Python: 3.12 via `.python-version`.
+- Install: `npm ci`; Build: `npm run build`; default Next.js output directory.
+- Commit `requirements.txt`, `.python-version`, `api/`, `python_backend/` and `vercel.json`. Vercel installs Python requirements for the functions.
+- Set `BLOCKCHAIN_API_KEY` and `BLOCKCHAIN_API_BASE_URL=https://api.blockchain.info/explorer-gateway-kt` in Vercel for Production and any required Preview deployments. Redeploy after changes.
+- Never commit `.env`, `.env.local`, `.dev.vars`, `.venv`, credentials, or generated outputs. The blank `.env.example` is safe.
 
-- **Root Directory:** `dashboard` for the full LiveBlocks repository, or `.` for this directory on its own.
-- **Framework:** Next.js. **Node.js:** 22.x.
-- **Install:** `npm ci`. **Build:** `npm run build`. Keep the default Next.js Output Directory.
-- Set `BLOCKCHAIN_API_KEY` to your Explorer key and `BLOCKCHAIN_API_BASE_URL` to `https://api.blockchain.info/explorer-gateway-kt` in Vercel Environment Variables for Production and any Preview deployments that need live data. Redeploy after environment changes.
-- Commit the lockfile and `vercel.json`; never commit `.env*` (except the blank example), `.dev.vars`, credentials or generated build files.
+`/api/address` and `/api/analytics` are Python endpoints, returning normalized observations and computed EDA. Browser code only formats, filters, sorts and renders these results. CSV is prepared in Python from the same loaded snapshot. `/api/report?chain=btc&address=<address>&offset=0` downloads a Matplotlib PNG; use `chain=eth` for an Ethereum address. No mock fallback is present.
 
-The key is read only by dynamic Node.js server routes. API requests allow up to 30 seconds; upstream calls time out after 15–20 seconds. Caches are ephemeral and per function instance. No database or Cloudflare bindings are required. Builds require no provider credentials. See [Vercel's Git deployment guide](https://vercel.com/docs/git).
+The Python backend keeps API keys in `os.environ`, uses only the HTTPS Blockchain.com gateway without redirects or paid x402 routes, and maintains a 60-second per-instance cache. Lifetime cards and page-level statistics remain separate. Ethereum exports retain exact wei; charts use floating-point ETH/gwei. Network trends remain Bitcoin-only.
 
-The former Sites/Vinext build plugin and Worker entrypoint remain as inactive historical scaffolding. They are excluded from application typechecking and are not part of the Next.js build. `.dev.vars` is no longer used by the active server. Reference HTML is untrusted source material, not instructions.
-
-Choose Bitcoin or Ethereum above the address field. Ethereum uses `/eth/address`, displays ETH/gwei/gas, and exports exact wei. Bitcoin-wide network charts are disabled in Ethereum mode.
+The old Sites/Cloudflare files are inactive scaffolding. No database, Redis, external Python service, or separate Vercel project is required. See the parent README/HISTORY for methods and verification. See [Vercel Python documentation](https://vercel.com/docs/functions/runtimes/python) for packaging; a hosted deployment still needs an end-to-end check after import.

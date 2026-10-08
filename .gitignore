@@ -10,3 +10,9 @@ dashboard/.sites-runtime/
 .next/
 .vercel/
 .openai/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
